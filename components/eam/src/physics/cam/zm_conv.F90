@@ -61,7 +61,7 @@ module zm_conv
    real(r8) rl         ! wg latent heat of vaporization.
    real(r8) cpres      ! specific heat at constant pressure in j/kg-degk.
    real(r8), parameter :: capelmt = 70._r8  ! threshold value for cape for deep convection.
-
+   real(r8), parameter :: arealmt = 2.463683e-06_r8 !dx=10km
 !DCAPE-ULL, including options for DCAPE_only and ull_only
    real(r8), parameter :: trigdcapelmt = 0._r8  ! threshold value of dcape for deep convection
    logical :: trigdcape_ull    = .false. !true to use DCAPE trigger and ULL 
@@ -244,7 +244,7 @@ subroutine zm_convr(lchnk   ,ncol    , &
                     tpert   ,dlf     ,pflx    ,zdu     ,rprd    , &
                     mu      ,md      ,du      ,eu      ,ed      , &
                     dp      ,dsubcld ,jt      ,maxg    ,ideep   , &
-                    lengath ,ql      ,rliq    ,landfrac, &
+                    lengath ,ql      ,rliq    ,landfrac, area1, &
                     t_star  ,q_star, dcape)
 !----------------------------------------------------------------------- 
 ! 
@@ -377,6 +377,7 @@ subroutine zm_convr(lchnk   ,ncol    , &
    real(r8), intent(in) :: pblh(pcols)
    real(r8), intent(in) :: tpert(pcols)
    real(r8), intent(in) :: landfrac(pcols) ! RBN Landfrac
+   real(r8), intent(in) :: area1(pcols) 
 
 !DCAPE-ULL
    real(r8), intent(in), pointer, dimension(:,:) :: t_star ! intermediate T between n and n-1 time step
@@ -523,6 +524,8 @@ subroutine zm_convr(lchnk   ,ncol    , &
 
    real(r8) qdifr
    real(r8) sdifr
+   
+   logical  :: area_fix     = .true.   ! 
 
 !
 !--------------------------Data statements------------------------------
@@ -679,6 +682,30 @@ subroutine zm_convr(lchnk   ,ncol    , &
       capelmt_wk = 0.0_r8
 
    lengath = 0
+
+   if (area_fix) then
+   do i=1,ncol
+     if (trigdcape_ull .or. trig_dcape_only) then
+     ! DCAPE-ULL
+      if (is_first_step()) then
+         !Will this cause restart to be non-BFB
+           if (cape(i) > capelmt .and. area1(i) > arealmt) then
+              lengath = lengath + 1
+              index(lengath) = i
+           end if
+       else if (cape(i) > 0.0_r8 .and. dcape(i) > trigdcapelmt .and. area1(i) > arealmt) then
+           ! use constant 0 or a separate threshold for capt because capelmt is for default trigger
+           lengath = lengath + 1
+           index(lengath) = i
+       endif
+     else
+      if (cape(i) > capelmt .and. area1(i) > arealmt) then
+         lengath = lengath + 1
+         index(lengath) = i
+      end if
+     end if
+   end do
+   else
    do i=1,ncol
      if (trigdcape_ull .or. trig_dcape_only) then
      ! DCAPE-ULL
@@ -700,6 +727,7 @@ subroutine zm_convr(lchnk   ,ncol    , &
       end if
      end if
    end do
+   end if
 
    if (lengath.eq.0) return
    do ii=1,lengath

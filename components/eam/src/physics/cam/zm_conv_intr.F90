@@ -248,7 +248,7 @@ subroutine zm_conv_tend(pblh    ,mcon    ,cme     , &
    use physics_types, only: physics_state_copy, physics_state_dealloc
    use physics_types, only: physics_ptend_sum, physics_ptend_dealloc
 
-   use phys_grid,     only: get_lat_p, get_lon_p
+   use phys_grid,     only: get_lat_p, get_lon_p,get_area_all_p
    use time_manager,  only: get_nstep, is_first_step
    use physics_buffer, only : pbuf_get_field, physics_buffer_desc, pbuf_old_tim_idx
    use constituents,  only: pcnst, cnst_get_ind, cnst_is_convtran1
@@ -347,6 +347,8 @@ subroutine zm_conv_tend(pblh    ,mcon    ,cme     , &
    real(r8) :: mu_out(pcols,pver)
    real(r8) :: md_out(pcols,pver)
 
+   real(r8) :: area1(pcols)
+
    ! used in momentum transport calculation
    real(r8) :: winds(pcols, pver, 2)
    real(r8) :: wind_tends(pcols, pver, 2)
@@ -405,6 +407,8 @@ subroutine zm_conv_tend(pblh    ,mcon    ,cme     , &
 !
 ! Begin with Zhang-McFarlane (1996) convection parameterization
 !
+   call get_area_all_p(lchnk, ncol, area1)
+
    call t_startf ('zm_convr')
    call zm_convr(   lchnk   ,ncol    , &
                     state%t       ,state%q(:,:,1)     ,prec    ,jctop   ,jcbot   , &
@@ -414,7 +418,7 @@ subroutine zm_conv_tend(pblh    ,mcon    ,cme     , &
                     tpert   ,dlf     ,pflx    ,zdu     ,rprd    , &
                     mu,md,du,eu,ed      , &
                     dp ,dsubcld ,jt,maxg,ideep   , &
-                    lengath ,ql      ,rliq  ,landfrac,  &
+                    lengath ,ql      ,rliq  ,landfrac, area1,  &
                     t_star, q_star, dcape)  
    call t_stopf ('zm_convr')
 

@@ -502,6 +502,8 @@ module nudging
   real(r8), allocatable, dimension(:,:,:,:) :: INTP_Q       ! (pcols,pver,begchunk:endchunk,:)
   real(r8), allocatable, dimension(:,:,:)   :: INTP_PS      ! (pcols,begchunk:endchunk,:)
 
+  logical  :: area_fix     = .true.
+
 contains
   !================================================================
   subroutine nudging_readnl(nlfile)
@@ -743,7 +745,7 @@ contains
    use error_messages,only: alloc_err
    use dycore        ,only: dycore_is
    use dyn_grid      ,only: get_horiz_grid_dim_d
-   use phys_grid     ,only: get_rlat_p,get_rlon_p,get_ncols_p
+   use phys_grid     ,only: get_rlat_p,get_rlon_p,get_ncols_p,get_area_all_p
    use cam_history   ,only: addfld
    use shr_const_mod ,only: SHR_CONST_PI
 
@@ -761,6 +763,10 @@ contains
    real(r8) Val1_0,Val2_0,Val3_0,Val4_0
    real(r8) Val1_n,Val2_n,Val3_n,Val4_n
 
+   real(r8) :: area1(pcols),dum1(pcols,pver)
+   real(r8), parameter :: arealmt1 = 2.463683e-06_r8 !dx=10km
+   real(r8), parameter :: arealmt2 = 6.159116e-05_r8 !dx=50km
+ 
    ! Allocate Space for Nudging data arrays
    !-----------------------------------------
    if ( Nudge_Uprof .ne. 0 ) then
@@ -1063,7 +1069,20 @@ contains
    !------------------------------------------------------
    do lchnk=begchunk,endchunk
      ncol=get_ncols_p(lchnk)
+     call get_area_all_p(lchnk, ncol, area1)
      do icol=1,ncol
+       if (area_fix) then
+        if( area1(icol) < arealmt1 ) then
+            dum1(icol,:pver) = 0.0_r8
+        elseif ( area1(icol) > arealmt2 ) then
+            dum1(icol,:pver) = 1.0_r8
+        else
+            dum1(icol,:pver) = ( area1(icol) - arealmt1 ) /(arealmt2-arealmt1)
+        endif
+       else
+            dum1(icol,:pver) = 1.0_r8
+       endif
+
        rlat=get_rlat_p(lchnk,icol)*180._r8/SHR_CONST_PI
        rlon=get_rlon_p(lchnk,icol)*180._r8/SHR_CONST_PI
 
@@ -1111,19 +1130,19 @@ contains
          end if
      else          ! use Nudge_Tau directy as relaxation timescale
          if ( Nudge_Uprof .ne. 0 ) then
-            Nudge_Utau(:ncol,:pver,lchnk) =                        &
+            Nudge_Utau(:ncol,:pver,lchnk) = dum1(:ncol,:pver) *    &
             Nudge_Utau(:ncol,:pver,lchnk) / Nudge_Tau / sec_per_hour
          end if
          if ( Nudge_Vprof .ne. 0 ) then
-            Nudge_Vtau(:ncol,:pver,lchnk) =                        &
+            Nudge_Vtau(:ncol,:pver,lchnk) = dum1(:ncol,:pver) *    &
             Nudge_Vtau(:ncol,:pver,lchnk) / Nudge_Tau / sec_per_hour 
          end if
          if ( Nudge_Tprof .ne. 0 ) then
-            Nudge_Ttau(:ncol,:pver,lchnk) =                        &
+            Nudge_Ttau(:ncol,:pver,lchnk) = dum1(:ncol,:pver) *    &
             Nudge_Ttau(:ncol,:pver,lchnk) / Nudge_Tau / sec_per_hour 
          end if
          if ( Nudge_Qprof .ne. 0 ) then
-            Nudge_Qtau(:ncol,:pver,lchnk) =                        &
+            Nudge_Qtau(:ncol,:pver,lchnk) = dum1(:ncol,:pver) *    &
             Nudge_Qtau(:ncol,:pver,lchnk) / Nudge_Tau / sec_per_hour 
          end if
          if ( Nudge_PSprof .ne. 0 ) then
@@ -3004,7 +3023,11 @@ contains
    elseif(Nudge_prof.eq.1) then
      ! Uniform Nudging
      !-----------------
-     Wprof(:)=1.0
+     Wprof(:)=1.0_r8
+     if (area_fix) then
+         Wprof(nlev-1)=0.5_r8
+         Wprof(nlev)  =0.0_r8
+     endif
    elseif(Nudge_prof.eq.2) then
      ! Localized Nudging with specified Heaviside window function
      !------------------------------------------------------------
